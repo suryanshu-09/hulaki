@@ -1,2 +1,2 @@
-# daakiya
+# Hulaki
 Postman but TUI
