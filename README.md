@@ -1,12 +1,5 @@
 # Hulaki
 
-Postman but TUI
+Postman delivering right to your terminal
 
-http
-graphql
-AI??
-MCP
-gRPC
-WebSockets
-Socket.IO
-MQTT
+![demo](./demo.gif)

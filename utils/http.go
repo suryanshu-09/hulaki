@@ -1,3 +1,7 @@
+/*
+Package utils
+Utility functions
+*/
 package utils
 
 import (
