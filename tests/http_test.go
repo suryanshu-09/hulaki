@@ -26,7 +26,7 @@ import (
 // SCRIPTS pre-request, post-response
 // SETTINGS lots of stuff
 
-func setupTestServer() *httptest.Server {
+func setupHTTPServer() *httptest.Server {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -41,9 +41,10 @@ func setupTestServer() *httptest.Server {
 				w.Header().Set("tryharder", "tried harder")
 				return
 			}
-			body, _ := io.ReadAll(r.Body)
-			if len(body) > 0 {
-				w.Write(body)
+			body := bytes.Buffer{}
+			io.Copy(&body, r.Body)
+			if body.Len() > 0 {
+				io.Copy(w, &body)
 				return
 			}
 			w.Write([]byte("this was a get request"))
@@ -67,7 +68,7 @@ func setupTestServer() *httptest.Server {
 }
 
 func TestGet(t *testing.T) {
-	server := setupTestServer()
+	server := setupHTTPServer()
 	defer server.Close()
 	t.Run("test GET normally", func(t *testing.T) {
 		resp, err := utils.HTTPGet(server.URL)
@@ -75,12 +76,13 @@ func TestGet(t *testing.T) {
 			t.Errorf("got an error:%s", err.Error())
 		}
 		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
+		body := bytes.Buffer{}
+		io.Copy(&body, resp.Body)
 		if err != nil {
 			t.Errorf("got an error:%s", err.Error())
 		}
 		want := "this was a get request"
-		got := string(body)
+		got := body.String()
 		if got != want {
 			t.Errorf("got:%s\nwant:%s", got, want)
 		}
@@ -92,12 +94,13 @@ func TestGet(t *testing.T) {
 			t.Errorf("got an error:%s", err.Error())
 		}
 		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
+		body := bytes.Buffer{}
+		io.Copy(&body, resp.Body)
 		if err != nil {
 			t.Errorf("got an error:%s", err.Error())
 		}
 		want := "1612"
-		got := string(body)
+		got := body.String()
 		if got != want {
 			t.Errorf("got:%s\nwant:%s", got, want)
 		}
@@ -129,12 +132,10 @@ func TestGet(t *testing.T) {
 			t.Errorf("got an error:%s", err.Error())
 		}
 		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Errorf("got an error:%s", err.Error())
-		}
+		body := bytes.Buffer{}
+		io.Copy(&body, resp.Body)
 		want := "new body new test"
-		got := string(body)
+		got := body.String()
 		if got != want {
 			t.Errorf("got:%s\nwant:%s", got, want)
 		}
@@ -142,7 +143,7 @@ func TestGet(t *testing.T) {
 }
 
 func TestPost(t *testing.T) {
-	server := setupTestServer()
+	server := setupHTTPServer()
 	defer server.Close()
 	t.Run("test POST normally", func(t *testing.T) {
 		resp, err := utils.HTTPPost(server.URL)
@@ -150,12 +151,10 @@ func TestPost(t *testing.T) {
 			t.Errorf("got an error:%s", err.Error())
 		}
 		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Errorf("got an error:%s", err.Error())
-		}
+		body := bytes.Buffer{}
+		io.Copy(&body, resp.Body)
 		want := "this was a post request"
-		got := string(body)
+		got := body.String()
 		if got != want {
 			t.Errorf("got:%s\nwant:%s", got, want)
 		}
@@ -163,7 +162,7 @@ func TestPost(t *testing.T) {
 }
 
 func TestPut(t *testing.T) {
-	server := setupTestServer()
+	server := setupHTTPServer()
 	defer server.Close()
 	t.Run("test PUT normally", func(t *testing.T) {
 		resp, err := utils.HTTPPut(server.URL)
@@ -171,12 +170,10 @@ func TestPut(t *testing.T) {
 			t.Errorf("got an error:%s", err.Error())
 		}
 		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Errorf("got an error:%s", err.Error())
-		}
+		body := bytes.Buffer{}
+		io.Copy(&body, resp.Body)
 		want := "this was a put request"
-		got := string(body)
+		got := body.String()
 		if got != want {
 			t.Errorf("got:%s\nwant:%s", got, want)
 		}
@@ -184,7 +181,7 @@ func TestPut(t *testing.T) {
 }
 
 func TestPatch(t *testing.T) {
-	server := setupTestServer()
+	server := setupHTTPServer()
 	defer server.Close()
 	t.Run("test PATCH normally", func(t *testing.T) {
 		resp, err := utils.HTTPPatch(server.URL)
@@ -192,12 +189,10 @@ func TestPatch(t *testing.T) {
 			t.Errorf("got an error:%s", err.Error())
 		}
 		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Errorf("got an error:%s", err.Error())
-		}
+		body := bytes.Buffer{}
+		io.Copy(&body, resp.Body)
 		want := "this was a patch request"
-		got := string(body)
+		got := body.String()
 		if got != want {
 			t.Errorf("got:%s\nwant:%s", got, want)
 		}
@@ -205,7 +200,7 @@ func TestPatch(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	server := setupTestServer()
+	server := setupHTTPServer()
 	defer server.Close()
 	t.Run("test Delete normally", func(t *testing.T) {
 		resp, err := utils.HTTPDelete(server.URL)
@@ -213,12 +208,10 @@ func TestDelete(t *testing.T) {
 			t.Errorf("got an error:%s", err.Error())
 		}
 		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Errorf("got an error:%s", err.Error())
-		}
+		body := bytes.Buffer{}
+		io.Copy(&body, resp.Body)
 		want := "this was a delete request"
-		got := string(body)
+		got := body.String()
 		if got != want {
 			t.Errorf("got:%s\nwant:%s", got, want)
 		}
@@ -226,7 +219,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestHead(t *testing.T) {
-	server := setupTestServer()
+	server := setupHTTPServer()
 	defer server.Close()
 	t.Run("test Head normally", func(t *testing.T) {
 		resp, err := utils.HTTPHead(server.URL)
@@ -236,9 +229,6 @@ func TestHead(t *testing.T) {
 		defer resp.Body.Close()
 		head := resp.Header
 		got := head.Get("works")
-		if err != nil {
-			t.Errorf("got an error:%s", err.Error())
-		}
 		want := "this was a head request"
 		if got != want {
 			t.Errorf("got:%s\nwant:%s", got, want)
@@ -247,7 +237,7 @@ func TestHead(t *testing.T) {
 }
 
 func TestOptions(t *testing.T) {
-	server := setupTestServer()
+	server := setupHTTPServer()
 	defer server.Close()
 	t.Run("test Options normally", func(t *testing.T) {
 		resp, err := utils.HTTPOptions(server.URL)
@@ -257,9 +247,6 @@ func TestOptions(t *testing.T) {
 		defer resp.Body.Close()
 		head := resp.Header
 		got := head.Get("works")
-		if err != nil {
-			t.Errorf("got an error:%s", err.Error())
-		}
 		want := "this was a options request"
 		if got != want {
 			t.Errorf("got:%s\nwant:%s", got, want)
