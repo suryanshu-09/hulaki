@@ -108,19 +108,20 @@ func HTTPOut(cmd *cobra.Command, resp *http.Response) error {
 	}
 
 	less, _ := cmd.Flags().GetBool("less")
+	out := cmd.OutOrStdout()
 	if !less {
-		fmt.Fprintf(os.Stdout, "%s\n", styles.Heading.Render("HEADERS"))
+		fmt.Fprintf(out, "%s\n", styles.Heading.Render("HEADERS"))
 		for key, values := range resp.Header {
 			for _, value := range values {
-				fmt.Fprintf(os.Stdout, "%s: %s\n", styles.Key.Render(key), value)
+				fmt.Fprintf(out, "%s: %s\n", styles.Key.Render(key), value)
 			}
 		}
 
-		fmt.Fprintf(os.Stdout, "%s\n", styles.Heading.Render("BODY"))
-		fmt.Fprintf(os.Stdout, "%s\n", styles.Content.Render(body.String()))
+		fmt.Fprintf(out, "%s\n", styles.Heading.Render("BODY"))
+		fmt.Fprintf(out, "%s\n", styles.Content.Render(body.String()))
 		return nil
 	}
-	io.Copy(os.Stdout, bytes.NewBuffer(body.Bytes()))
+	io.Copy(out, bytes.NewBuffer(body.Bytes()))
 
 	return nil
 }
