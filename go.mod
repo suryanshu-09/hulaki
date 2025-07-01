@@ -4,7 +4,7 @@ go 1.24.4
 
 require (
 	github.com/charmbracelet/bubbles/v2 v2.0.0-beta.1
-	github.com/charmbracelet/bubbletea/v2 v2.0.0-beta.1
+	github.com/charmbracelet/bubbletea/v2 v2.0.0-beta1
 	github.com/charmbracelet/fang v0.2.0
 	github.com/charmbracelet/lipgloss/v2 v2.0.0-beta.1
 	github.com/gorilla/websocket v1.5.3

@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"log"
-	"sync"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/v2/textarea"
@@ -19,26 +20,33 @@ import (
 
 var wsCmd = &cobra.Command{
 	Use:   "ws",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command.`,
+	Short: "Interactive WebSocket client",
+	Long: `The "ws" command allows you to connect to a WebSocket server and interact with it in real-time.
+You can send and receive messages using a terminal-based user interface.`,
+	Example: `Examples:
+1. Perform a basic GET request:
+   hulaki http get https://example.com
+
+2. Perform a GET request with query parameters:
+   hulaki http get https://api.example.com/data --params=type=user,status=active
+
+3. Perform a GET request with custom headers:
+   hulaki http get https://api.example.com/data --headers=Authorization=BearerToken,Accept=application/json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) < 1 {
-			return errors.New("please provide a url")
+		params, headers, err := WebsocketIn(cmd, args)
+		if err != nil {
+			return err
 		}
 		url := args[0]
-		ws, err := utils.NewWebsocketClient(url)
+		ws, err := utils.NewWebsocketClient(url, utils.WithHeaders(headers), utils.WithParams(params))
 		if err != nil {
 			return err
 		}
 		defer ws.Close()
 
 		wc := NewWebsocketCli(ws)
-		wg := sync.WaitGroup{}
 
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
 			for {
 				recieve := new(bytes.Buffer)
 				err := ws.Read(recieve)
@@ -50,22 +58,23 @@ and usage of using your command.`,
 			}
 		}()
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if _, err := tea.NewProgram(wc, tea.WithMouseAllMotion()).Run(); err != nil {
-				log.Fatal(err)
-			}
-		}()
+		if _, err := tea.NewProgram(wc, tea.WithMouseAllMotion()).Run(); err != nil {
+			log.Fatal(err)
+		}
 
-		wg.Wait()
+		os.Exit(0)
 		return nil
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(wsCmd)
+
+	wsCmd.Flags().String("headers", "", "Custom headers for the WebSocket connection, formatted as key=value pairs separated by commas")
+	wsCmd.Flags().StringP("params", "p", "", "Query parameters for the WebSocket connection, formatted as key=value pairs separated by commas")
 }
+
+var termHeight, termWidth = 0, 0
 
 type WebsocketCli struct {
 	Input    textarea.Model
@@ -81,7 +90,10 @@ func (wc *WebsocketCli) Init() tea.Cmd {
 func (wc *WebsocketCli) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		wc.Input.SetWidth(msg.Width - 2)
+		termHeight = msg.Height
+		termWidth = msg.Width
+
+		wc.Input.SetWidth(msg.Width - 4)
 		wc.ViewPort.SetWidth(msg.Width - 2)
 		wc.ViewPort.SetHeight(msg.Height / 5)
 	case tea.KeyMsg:
@@ -95,7 +107,7 @@ func (wc *WebsocketCli) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err != nil {
 				log.Println("Error sending message:", err)
 			}
-			wc.Input.SetValue("")
+			wc.Input.Reset()
 		}
 	}
 
@@ -113,8 +125,8 @@ func (wc *WebsocketCli) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (wc *WebsocketCli) View() string {
-	WsOutputStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder())
-	return lipgloss.JoinVertical(lipgloss.Left, WsOutputStyle.Render(wc.Input.View()), "\n", WsOutputStyle.Render(wc.ViewPort.View()))
+	WsOutputStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Width(termWidth - 2).BorderForeground(lipgloss.Color("#8a2be2"))
+	return lipgloss.JoinVertical(lipgloss.Left, styles.Key.Render("Send a message:"), WsOutputStyle.Render(wc.Input.View()), "\n", WsOutputStyle.Render(wc.ViewPort.View()))
 }
 
 func (wc *WebsocketCli) AddMessage(message string) {
@@ -133,9 +145,11 @@ func (wc *WebsocketCli) formatMessages() string {
 func NewWebsocketCli(ws *utils.WebsocketClient) *WebsocketCli {
 	ta := textarea.New()
 	ta.CharLimit = 240
-	ta.Prompt = styles.Key.Render("Send a message:")
-	ta.Placeholder = "msg..."
+	ta.Styles = textarea.DefaultDarkStyles()
 	ta.SetHeight(1)
+	ta.VirtualCursor = true
+	ta.ShowLineNumbers = false
+	ta.Placeholder = "msg..."
 	ta.Styles.Cursor.Shape = tea.CursorBlock
 	ta.Styles.Cursor.Blink = true
 	ta.Styles.Cursor.BlinkSpeed = 2 * time.Second
@@ -143,9 +157,12 @@ func NewWebsocketCli(ws *utils.WebsocketClient) *WebsocketCli {
 	ta.Focus()
 
 	v := viewport.New()
+	v.SetWidth(termWidth - 2)
+	v.SetHeight(termHeight / 5)
 	v.FillHeight = true
 	v.MouseWheelEnabled = true
 	v.SoftWrap = true
+	v.KeyMap = viewport.KeyMap{}
 
 	return &WebsocketCli{
 		Input:    ta,
@@ -153,4 +170,49 @@ func NewWebsocketCli(ws *utils.WebsocketClient) *WebsocketCli {
 		WS:       ws,
 		messages: []string{},
 	}
+}
+
+func WebsocketIn(cmd *cobra.Command, args []string) (params map[string]string, headers map[string]string, err error) {
+	p, err := cmd.Flags().GetString("params")
+	params = make(map[string]string, 0)
+	if err == nil {
+		if i := strings.Index(p, ","); i != -1 {
+			paramsArr := strings.SplitSeq(p, ",")
+			for param := range paramsArr {
+				if i := strings.Index(param, "="); i != -1 {
+					temp := strings.Split(param, "=")
+					params[temp[0]] = temp[1]
+				}
+			}
+		} else {
+			if i := strings.Index(p, "="); i != -1 {
+				temp := strings.Split(p, "=")
+				params[temp[0]] = temp[1]
+			}
+		}
+	}
+
+	h, _ := cmd.Flags().GetString("headers")
+	headers = make(map[string]string, 0)
+	if err == nil {
+		if i := strings.Index(h, ","); i != -1 {
+			headersArr := strings.SplitSeq(h, ",")
+			for header := range headersArr {
+				if i := strings.Index(header, "="); i != -1 {
+					temp := strings.Split(header, "=")
+					headers[temp[0]] = temp[1]
+				}
+			}
+		} else {
+			if i := strings.Index(h, "="); i != -1 {
+				temp := strings.Split(h, "=")
+				headers[temp[0]] = temp[1]
+			}
+		}
+	}
+
+	if len(args) < 1 {
+		return nil, nil, errors.New("please provide a url")
+	}
+	return
 }
