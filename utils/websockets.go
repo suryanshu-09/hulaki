@@ -10,9 +10,13 @@ import (
 )
 
 type WebsocketClient struct {
-	URL    string
-	WS     *websocket.Conn
-	Header *http.Response
+	URL       string
+	WS        *websocket.Conn
+	Header    *http.Response
+	ReadChan  chan string
+	WriteChan chan string
+	ErrorChan chan error
+	CloseChan chan struct{}
 }
 
 func NewWebsocketClient(url string, args ...Args) (*WebsocketClient, error) {
@@ -24,16 +28,66 @@ func NewWebsocketClient(url string, args ...Args) (*WebsocketClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &WebsocketClient{WS: ws, URL: url, Header: header}, nil
+
+	client := &WebsocketClient{
+		WS:        ws,
+		URL:       url,
+		Header:    header,
+		ReadChan:  make(chan string),
+		WriteChan: make(chan string),
+		ErrorChan: make(chan error),
+		CloseChan: make(chan struct{}),
+	}
+
+	go client.startReader()
+	go client.startWriter()
+
+	go client.startReader()
+	go client.startWriter()
+	return client, nil
 }
 
 func (ws *WebsocketClient) Read(out io.Writer) error {
-	_, p, err := ws.WS.ReadMessage()
-	if err != nil {
+	select {
+	case message := <-ws.ReadChan:
+		fmt.Fprint(out, message)
+		return nil
+	case err := <-ws.ErrorChan:
 		return err
+	case <-ws.CloseChan:
+		return fmt.Errorf("connection closed")
 	}
-	fmt.Fprint(out, string(p))
-	return nil
+}
+
+func (ws *WebsocketClient) startReader() {
+	for {
+		select {
+		case <-ws.CloseChan:
+			return
+		default:
+			_, message, err := ws.WS.ReadMessage()
+			if err != nil {
+				ws.ErrorChan <- err
+				return
+			}
+			ws.ReadChan <- string(message)
+		}
+	}
+}
+
+func (ws *WebsocketClient) startWriter() {
+	for {
+		select {
+		case <-ws.CloseChan:
+			return
+		case message := <-ws.WriteChan:
+			err := ws.WS.WriteMessage(websocket.TextMessage, []byte(message))
+			if err != nil {
+				ws.ErrorChan <- err
+				return
+			}
+		}
+	}
 }
 
 func (ws *WebsocketClient) Write(mt int, msg io.Reader) error {
@@ -42,9 +96,21 @@ func (ws *WebsocketClient) Write(mt int, msg io.Reader) error {
 	if err != nil {
 		return err
 	}
-	return ws.WS.WriteMessage(websocket.TextMessage, data.Bytes())
+
+	select {
+	case ws.WriteChan <- data.String():
+		return nil
+	case err := <-ws.ErrorChan:
+		return err
+	case <-ws.CloseChan:
+		return fmt.Errorf("connection closed")
+	}
 }
 
 func (ws *WebsocketClient) Close() error {
+	close(ws.CloseChan)
+	close(ws.ReadChan)
+	close(ws.WriteChan)
+	close(ws.ErrorChan)
 	return ws.WS.Close()
 }

@@ -24,14 +24,14 @@ var wsCmd = &cobra.Command{
 	Long: `The "ws" command allows you to connect to a WebSocket server and interact with it in real-time.
 You can send and receive messages using a terminal-based user interface.`,
 	Example: `Examples:
-1. Perform a basic GET request:
-   hulaki http get https://example.com
+1. Connect to a WebSocket server:
+   hulaki ws ws://example.com/socket
 
-2. Perform a GET request with query parameters:
-   hulaki http get https://api.example.com/data --params=type=user,status=active
+2. Connect to a WebSocket server with query parameters:
+   hulaki ws ws://example.com/socket --params=type=user,status=active
 
-3. Perform a GET request with custom headers:
-   hulaki http get https://api.example.com/data --headers=Authorization=BearerToken,Accept=application/json`,
+3. Connect to a WebSocket server with custom headers:
+   hulaki ws ws://example.com/socket --headers=Authorization=BearerToken,Accept=application/json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		params, headers, err := WebsocketIn(cmd, args)
 		if err != nil {
@@ -173,42 +173,27 @@ func NewWebsocketCli(ws *utils.WebsocketClient) *WebsocketCli {
 }
 
 func WebsocketIn(cmd *cobra.Command, args []string) (params map[string]string, headers map[string]string, err error) {
+	parseKeyValuePairs := func(input string) map[string]string {
+		result := make(map[string]string)
+		pairs := strings.Split(input, ",")
+		for _, pair := range pairs {
+			kv := strings.SplitN(pair, "=", 2)
+			if len(kv) == 2 {
+				result[kv[0]] = kv[1]
+			}
+		}
+		return result
+	}
 	p, err := cmd.Flags().GetString("params")
 	params = make(map[string]string, 0)
 	if err == nil {
-		if i := strings.Index(p, ","); i != -1 {
-			paramsArr := strings.SplitSeq(p, ",")
-			for param := range paramsArr {
-				if i := strings.Index(param, "="); i != -1 {
-					temp := strings.Split(param, "=")
-					params[temp[0]] = temp[1]
-				}
-			}
-		} else {
-			if i := strings.Index(p, "="); i != -1 {
-				temp := strings.Split(p, "=")
-				params[temp[0]] = temp[1]
-			}
-		}
+		params = parseKeyValuePairs(p)
 	}
 
 	h, _ := cmd.Flags().GetString("headers")
 	headers = make(map[string]string, 0)
 	if err == nil {
-		if i := strings.Index(h, ","); i != -1 {
-			headersArr := strings.SplitSeq(h, ",")
-			for header := range headersArr {
-				if i := strings.Index(header, "="); i != -1 {
-					temp := strings.Split(header, "=")
-					headers[temp[0]] = temp[1]
-				}
-			}
-		} else {
-			if i := strings.Index(h, "="); i != -1 {
-				temp := strings.Split(h, "=")
-				headers[temp[0]] = temp[1]
-			}
-		}
+		headers = parseKeyValuePairs(h)
 	}
 
 	if len(args) < 1 {
