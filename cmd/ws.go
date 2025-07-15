@@ -175,8 +175,8 @@ func NewWebsocketCli(ws *utils.WebsocketClient) *WebsocketCli {
 func WebsocketIn(cmd *cobra.Command, args []string) (params map[string]string, headers map[string]string, err error) {
 	parseKeyValuePairs := func(input string) map[string]string {
 		result := make(map[string]string)
-		pairs := strings.Split(input, ",")
-		for _, pair := range pairs {
+		pairs := strings.SplitSeq(input, ",")
+		for pair := range pairs {
 			kv := strings.SplitN(pair, "=", 2)
 			if len(kv) == 2 {
 				result[kv[0]] = kv[1]
